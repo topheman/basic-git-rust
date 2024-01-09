@@ -2,9 +2,12 @@
 use std::env;
 #[allow(unused_imports)]
 use std::fs;
+use std::io::Read;
 use std::path::{PathBuf, Path};
+use anyhow::bail;
 use clap::{Command, Arg};
 use anyhow::anyhow;
+// use flate2::read::GzDecoder;
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -40,7 +43,12 @@ fn find_git_root(dir: &PathBuf) -> anyhow::Result<PathBuf> {
             }
         }
     }
-    Ok(git_root.to_path_buf())
+    Ok(git_root.join(".git").to_path_buf())
+}
+
+fn find_git_root_from_cwd() -> anyhow::Result<PathBuf> {
+    let cwd = std::env::current_dir().expect("Expect retrieving current working directory");
+    return find_git_root(&cwd);
 }
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
@@ -48,41 +56,67 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
 
     match matches.subcommand() {
         Some(("init", submatches)) => {
-            submatches.get_one::<String>("init_path").and_then(|init_path| {
-                let init_path = Path::new(init_path);
-                let path = if !(init_path).is_absolute() {
-                    let resolved_path = std::env::current_dir().expect("Expect retrieving current working directory").as_path().join(init_path);
-                    resolved_path.clone()
+            match submatches.get_one::<String>("init_path") {
+                Some(init_path) => {
+                    let init_path = Path::new(init_path);
+                    let path = if !(init_path).is_absolute() {
+                        let resolved_path = std::env::current_dir().expect("Expect retrieving current working directory").as_path().join(init_path);
+                        resolved_path.clone()
+                    }
+                     else {
+                        init_path.to_path_buf()
+                    };
+                    // todo git real implementation allows to init git repo inside a git repo - remove this check ?
+                    if let Ok(git_root) = find_git_root(&path) {
+                        bail!("The folder is already versionned by git in {}", git_root.display());
+                    }
+                    println!("Initializing {}", path.join(".git").display());
+                    // todo better errors such as "No such file or directory"
+                    fs::create_dir(path.join(".git"))?;
+                    fs::create_dir(path.join(".git").join("objects"))?;
+                    fs::create_dir(path.join(".git").join("refs"))?;
+                    fs::write(path.join(".git").join("HEAD"), "ref: refs/heads/master\n")?;
+                    println!("Initialized git directory");
+                    return Ok(())
                 }
-                 else {
-                    init_path.to_path_buf()
-                };
-                // todo git real implementation allows to init git repo inside a git repo - remove this check ?
-                if let Ok(git_root) = find_git_root(&path) {
-                    println!("The folder is already versionned by git in {}", git_root.display());
-                    return Some(());
-                }
-                println!("Initializing {}", path.join(".git").display());
-                // todo better errors such as "No such file or directory"
-                fs::create_dir(path.join(".git")).unwrap();
-                fs::create_dir(path.join(".git").join("objects")).unwrap();
-                fs::create_dir(path.join(".git").join("refs")).unwrap();
-                fs::write(path.join(".git").join("HEAD"), "ref: refs/heads/master\n").unwrap();
-                println!("Initialized git directory");
-                Some(())
-            });
-            anyhow::Ok(())
+                _ => unreachable!()
+            }
         }
         Some(("cat-file", submatches)) => {
-            submatches.get_one::<String>("blob_sha").and_then(|blob_sha| {
-                if blob_sha.len() != 40 {
-                    println!("sha must contain 40 characters");
-                    return None;
+            match submatches.get_one::<String>("blob_sha") {
+                Some(blob_sha) => {
+                    if blob_sha.len() != 40 {
+                        return Err(anyhow!("sha must contain 40 characters, passed {}", blob_sha));
+                    }
+                    // todo make a macro out of it ?
+                    if let Ok(git_root) = find_git_root_from_cwd() {
+                        let target_path = git_root
+                            .join("objects")
+                            .join(blob_sha.get(0..2).unwrap())
+                            .join(blob_sha.get(2..).unwrap());
+                        if let Ok(file_content) = fs::read_to_string(target_path.clone()) {
+                            let mut decoder = flate2::read::ZlibDecoder::new(&*file_content.as_bytes());
+                            let mut output = String::new();
+                            decoder.read_to_string(&mut output).unwrap();
+                            println!("{}", output);
+                        }
+                        else {
+                            bail!("{} not found in {}", blob_sha, target_path.display());
+                        }
+                        println!("{}", blob_sha,);
+                        println!(
+                            "{}{}",
+                            blob_sha.get(0..2).unwrap(),
+                            blob_sha.get(2..).unwrap()
+                        );
+                    }
+                    return anyhow::Ok(());
                 }
-                println!("{}", blob_sha);
-                return Some(blob_sha)
-            });
-            anyhow::Ok(())
+                None => {
+                    eprintln!("You must provide a sha");
+                    return anyhow::Ok(())
+                }
+            }
         }
         Some((ext, _)) => {
             println!("unknown command \"{}\"", ext);
