@@ -7,7 +7,7 @@ use std::path::{PathBuf, Path};
 use anyhow::bail;
 use clap::{Command, Arg};
 use anyhow::anyhow;
-// use flate2::read::GzDecoder;
+use flate2::{self,read::ZlibDecoder};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -88,27 +88,18 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     if blob_sha.len() != 40 {
                         return Err(anyhow!("sha must contain 40 characters, passed {}", blob_sha));
                     }
-                    // todo make a macro out of it ?
                     if let Ok(git_root) = find_git_root_from_cwd() {
                         let target_path = git_root
                             .join("objects")
                             .join(blob_sha.get(0..2).unwrap())
                             .join(blob_sha.get(2..).unwrap());
-                        if let Ok(file_content) = fs::read_to_string(target_path.clone()) {
-                            let mut decoder = flate2::read::ZlibDecoder::new(&*file_content.as_bytes());
-                            let mut output = String::new();
-                            decoder.read_to_string(&mut output).unwrap();
-                            println!("{}", output);
-                        }
-                        else {
-                            bail!("{} not found in {}", blob_sha, target_path.display());
-                        }
-                        println!("{}", blob_sha,);
-                        println!(
-                            "{}{}",
-                            blob_sha.get(0..2).unwrap(),
-                            blob_sha.get(2..).unwrap()
-                        );
+                        let bytes = fs::read(target_path)?;
+                        let mut decoder = ZlibDecoder::new(&bytes[..]);
+                        let mut content = String::new();
+                        decoder.read_to_string(&mut content)?;
+                        // strip blob header before null caracter
+                        let blob_string = content.splitn(2, '\0').collect::<Vec<&str>>()[1];
+                        print!("{}", blob_string);
                     }
                     return anyhow::Ok(());
                 }
