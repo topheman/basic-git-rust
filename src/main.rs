@@ -1,13 +1,13 @@
+use anyhow::anyhow;
+use anyhow::bail;
+use clap::{Arg, Command};
+use flate2::{self, read::ZlibDecoder};
 #[allow(unused_imports)]
 use std::env;
 #[allow(unused_imports)]
 use std::fs;
 use std::io::Read;
-use std::path::{PathBuf, Path};
-use anyhow::bail;
-use clap::{Command, Arg};
-use anyhow::anyhow;
-use flate2::{self,read::ZlibDecoder};
+use std::path::{Path, PathBuf};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -16,17 +16,17 @@ fn cli() -> Command {
         .arg_required_else_help(true)
         .subcommand(
             Command::new("init")
-                .arg(
-                    Arg::new("init_path").default_value(".").help("Init path")
-                )
-                .about("Create an empty Git repository or reinitialize an existing one")
+                .arg(Arg::new("init_path").default_value(".").help("Init path"))
+                .about("Create an empty Git repository or reinitialize an existing one"),
         )
         .subcommand(
             Command::new("cat-file")
-            .about("Provide content or type and size information for repository objects")
-            .arg(
-                Arg::new("blob_sha").short('p').help("Pretty-print the contents of <object> based on its type.")
-            )
+                .about("Provide content or type and size information for repository objects")
+                .arg(
+                    Arg::new("blob_sha")
+                        .short('p')
+                        .help("Pretty-print the contents of <object> based on its type."),
+                ),
         )
 }
 
@@ -39,7 +39,9 @@ fn find_git_root(dir: &PathBuf) -> anyhow::Result<PathBuf> {
             }
             Ok(_) | Err(_) => {
                 // try one level up
-                git_root = git_root.parent().ok_or_else(|| anyhow!("Failed to detect git directory"))?;
+                git_root = git_root
+                    .parent()
+                    .ok_or_else(|| anyhow!("Failed to detect git directory"))?;
             }
         }
     }
@@ -60,15 +62,20 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 Some(init_path) => {
                     let init_path = Path::new(init_path);
                     let path = if !(init_path).is_absolute() {
-                        let resolved_path = std::env::current_dir().expect("Expect retrieving current working directory").as_path().join(init_path);
+                        let resolved_path = std::env::current_dir()
+                            .expect("Expect retrieving current working directory")
+                            .as_path()
+                            .join(init_path);
                         resolved_path.clone()
-                    }
-                     else {
+                    } else {
                         init_path.to_path_buf()
                     };
                     // todo git real implementation allows to init git repo inside a git repo - remove this check ?
                     if let Ok(git_root) = find_git_root(&path) {
-                        bail!("The folder is already versionned by git in {}", git_root.display());
+                        bail!(
+                            "The folder is already versionned by git in {}",
+                            git_root.display()
+                        );
                     }
                     println!("Initializing {}", path.join(".git").display());
                     // todo better errors such as "No such file or directory"
@@ -77,16 +84,19 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     fs::create_dir(path.join(".git").join("refs"))?;
                     fs::write(path.join(".git").join("HEAD"), "ref: refs/heads/master\n")?;
                     println!("Initialized git directory");
-                    return Ok(())
+                    return Ok(());
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
         Some(("cat-file", submatches)) => {
             match submatches.get_one::<String>("blob_sha") {
                 Some(blob_sha) => {
                     if blob_sha.len() != 40 {
-                        return Err(anyhow!("sha must contain 40 characters, passed {}", blob_sha));
+                        return Err(anyhow!(
+                            "sha must contain 40 characters, passed {}",
+                            blob_sha
+                        ));
                     }
                     if let Ok(git_root) = find_git_root_from_cwd() {
                         let target_path = git_root
@@ -105,7 +115,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 }
                 None => {
                     eprintln!("You must provide a sha");
-                    return anyhow::Ok(())
+                    return anyhow::Ok(());
                 }
             }
         }
@@ -113,6 +123,6 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
             println!("unknown command \"{}\"", ext);
             anyhow::Ok(())
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
