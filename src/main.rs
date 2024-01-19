@@ -9,6 +9,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+mod object;
+
 fn cli() -> Command {
     Command::new("mygit")
         .about("A toy git implementation in rust")
