@@ -106,9 +106,11 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                             .join(blob_sha.get(0..2).unwrap())
                             .join(blob_sha.get(2..).unwrap());
                         let bytes = fs::read(target_path)?;
+                        println!("{:?}", bytes);
                         let mut decoder = ZlibDecoder::new(&bytes[..]);
                         let mut content = String::new();
                         decoder.read_to_string(&mut content)?;
+                        println!("{:?}", content.as_bytes());
                         // strip blob header before null caracter
                         let blob_string = content.splitn(2, '\0').collect::<Vec<&str>>()[1];
                         print!("{}", blob_string);

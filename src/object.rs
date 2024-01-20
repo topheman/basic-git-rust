@@ -3,6 +3,19 @@ use flate2::{self, read::ZlibDecoder};
 use std::io::Read;
 use std::string::ToString;
 
+fn parse_object_buf(buf: Vec<u8>) -> Result<(), anyhow::Error> {
+    let mut decoder = ZlibDecoder::new(&buf[..]);
+    let mut content = String::new();
+    decoder.read_to_string(&mut content)?;
+    // strip blob header before null caracter
+    let [object_type, object_string] = content.splitn(2, '\0').collect::<Vec<&str>>()[..] else {
+        return Err(anyhow!("Failed to extract object type"));
+    };
+    print!("{} {}", object_type, object_string);
+    Ok(())
+}
+
+#[derive(Debug)]
 struct GitObjectInfos {
     id: String,
     mode: String,
@@ -16,30 +29,34 @@ trait GitObject {
         Self: Sized;
 }
 
+#[derive(Debug)]
 struct GitCommit {
     infos: GitObjectInfos,
     raw: String,
 }
 
-impl GitObject for GitCommit {
-    fn from_buf(str: Vec<u8>) -> Result<Self, anyhow::Error> {
-        let mut decoder = ZlibDecoder::new(&str[..]);
-        let mut content = String::new();
-        decoder.read_to_string(&mut content)?;
-        // strip blob header before null caracter
-        let blob_string = content.splitn(2, '\0').collect::<Vec<&str>>()[1];
-        print!("{}", blob_string);
-        Ok(Self {
-            infos: GitObjectInfos {
-                id: "toto_id".to_string(),
-                mode: "toto_mode".to_string(),
-                path: "toto_path".to_string(),
-                r#type: "toto_type".to_string(),
-            },
-            raw: blob_string.to_string(), // cleaned up part
-        })
-    }
-}
+// impl GitObject for GitCommit {
+//     fn from_buf(buf: Vec<u8>) -> Result<Self, anyhow::Error> {
+//         let mut decoder = ZlibDecoder::new(&buf[..]);
+//         let mut content = String::new();
+//         decoder.read_to_string(&mut content)?;
+//         // strip blob header before null caracter
+//         let [object_type, object_string] = content.splitn(2, '\0').collect::<Vec<&str>>()[..]
+//         else {
+//             return Err(anyhow!("Failed to extract object type"));
+//         };
+//         print!("!!!{} {}", blob_type, blob_string);
+//         Ok(Self {
+//             infos: GitObjectInfos {
+//                 id: "toto_id".to_string(),
+//                 mode: "toto_mode".to_string(),
+//                 path: "toto_path".to_string(),
+//                 r#type: "toto_type".to_string(),
+//             },
+//             raw: object_string.to_string(), // cleaned up part
+//         })
+//     }
+// }
 
 struct GitBlob {
     infos: GitObjectInfos,
@@ -53,25 +70,23 @@ struct GitTree {
 mod tests {
     use crate::object::GitObject;
 
-    use super::GitCommit;
+    use super::{parse_object_buf, GitCommit};
 
     #[test]
     fn git_commit_from_string() -> Result<(), anyhow::Error> {
-        let content = r#"���=��U��<ߐ�u���L_�΃8��(��1���߷�M��Uv�0�E�[�\�����$sSS���Ңx`��g0LZ��j���\��gOμW��7>��PE MY|JjRi:Hq��?�=��m>^������]�yp��"#.to_string();
         let content = vec![
-            120, 1, 173, 206, 77, 106, 3, 49, 12, 134, 225, 174, 125, 10, 45, 211, 22, 130, 252,
-            23, 205, 132, 80, 10, 189, 65, 111, 32, 91, 114, 103, 2, 19, 7, 219, 129, 30, 191, 67,
-            23, 61, 65, 183, 15, 47, 31, 95, 174, 219, 182, 14, 112, 132, 79, 163, 169, 2, 229, 20,
-            188, 243, 138, 101, 102, 79, 81, 38, 9, 20, 78, 105, 10, 196, 182, 40, 82, 12, 228, 37,
-            166, 108, 238, 220, 244, 54, 32, 107, 33, 14, 193, 250, 104, 253, 36, 214, 57, 141, 49,
-            164, 57, 248, 178, 103, 49, 57, 117, 69, 120, 62, 89, 195, 143, 177, 212, 6, 31, 75,
-            91, 251, 168, 247, 69, 225, 179, 246, 174, 3, 46, 249, 143, 142, 237, 151, 222, 179,
-            126, 169, 172, 219, 49, 215, 237, 13, 44, 97, 180, 20, 17, 9, 94, 209, 34, 154, 93,
-            247, 203, 67, 255, 101, 204, 20, 229, 113, 120, 121, 62, 3, 139, 192, 181, 67, 231,
-            155, 164, 250, 109, 126, 0, 175, 12, 87, 215,
+            120, 1, 149, 142, 77, 10, 194, 48, 16, 133, 93, 231, 20, 179, 244, 7, 100, 210, 38, 77,
+            34, 34, 130, 11, 151, 130, 55, 72, 50, 19, 90, 161, 70, 218, 241, 254, 22, 241, 2, 110,
+            30, 239, 189, 197, 199, 151, 235, 56, 14, 2, 141, 241, 43, 153, 152, 65, 59, 167, 57,
+            33, 114, 140, 75, 165, 96, 200, 53, 166, 132, 76, 77, 73, 209, 115, 23, 60, 7, 87, 172,
+            86, 175, 56, 241, 83, 0, 173, 54, 173, 165, 148, 2, 26, 239, 177, 43, 156, 49, 19, 179,
+            201, 134, 200, 99, 118, 158, 60, 167, 214, 170, 248, 150, 190, 78, 112, 233, 167, 97,
+            150, 250, 234, 25, 238, 117, 158, 89, 224, 248, 93, 231, 111, 142, 241, 185, 207, 117,
+            60, 45, 26, 104, 187, 208, 6, 236, 96, 135, 26, 81, 45, 239, 226, 41, 252, 55, 193,
+            234, 31, 65, 21, 142, 178, 222, 110, 14, 16, 137, 224, 58, 200, 45, 61, 56, 203, 172,
+            62, 134, 170, 80, 70,
         ];
-        let git_commit = GitCommit::from_buf(content)?;
-        // println!("{}", GitCommit::from_buf(content));
+        parse_object_buf(content);
         Ok(())
     }
 }

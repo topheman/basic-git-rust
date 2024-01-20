@@ -67,6 +67,7 @@ async function main(args) {
           console.error(err);
           process.exit(1)
         }
+        console.log(buffer.join(','))
         const blobString = buffer.toString()
         const [blobInfos, ...blobContent] = blobString.split('\x00');
         const [blobType, blobLength] = blobInfos.split(' ');
