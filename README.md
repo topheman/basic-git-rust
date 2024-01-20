@@ -1,61 +1,18 @@
-[![progress-banner](https://backend.codecrafters.io/progress/git/82df39f5-37c0-466d-b1f0-ab46c7d6de0a)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# basic-rust-git
 
-This is a starting point for Rust solutions to the
-["Build Your Own Git" Challenge](https://codecrafters.io/challenges/git).
+This is a very basic and partial rust implementation of git.
 
-In this challenge, you'll build a small Git implementation that's capable of
-initializing a repository, creating commits and cloning a public repository.
-Along the way we'll learn about the `.git` directory, Git objects (blobs,
-commits, trees etc.), Git's transfer protocols and more.
+The goal of the project is to get better at rust programming.
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+It started with the ["Build Your Own Git" Challenge](https://codecrafters.io/challenges/git) from code codecrafters.io, after the first two steps, it requires a 40$/months membership - it's a little too much for the usage I would have had.
 
-# Passing the first stage
+## Setup
 
-The entry point for your Git implementation is in `src/main.rs`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
+Add the following alias to your `.zshrc` / `.bashrc`, it will:
+
+- let you use the `basic-rust-git` implementation from anywhere by using the alias `mygit`
+- it runs
 
 ```sh
-git add .
-git commit -m "pass 1st stage" # any msg
-git push origin master
-```
-
-That's all!
-
-# Stage 2 & beyond
-
-Note: This section is for stages 2 and beyond.
-
-1. Ensure you have `cargo (1.54)` installed locally
-1. Run `./your_git.sh` to run your Git implementation, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
-
-# Testing locally
-
-The `your_git.sh` script is expected to operate on the `.git` folder inside the
-current working directory. If you're running this inside the root of this
-repository, you might end up accidentally damaging your repository's `.git`
-folder.
-
-We suggest executing `your_git.sh` in a different folder when testing locally.
-For example:
-
-```sh
-mkdir -p /tmp/testing && cd /tmp/testing
-/path/to/your/repo/your_git.sh init
-```
-
-To make this easier to type out, you could add a
-[shell alias](https://shapeshed.com/unix-alias/):
-
-```sh
-alias mygit=/path/to/your/repo/your_git.sh
-
-mkdir -p /tmp/testing && cd /tmp/testing
-mygit init
+alias mygit=/path/to/your/repo/mygit.sh
 ```
