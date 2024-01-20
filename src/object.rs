@@ -3,6 +3,8 @@ use flate2::{self, read::ZlibDecoder};
 use std::io::Read;
 use std::string::ToString;
 
+// todo - temporary removed from project
+
 #[derive(Debug)]
 struct GitObjectInfos {
     id: String,

@@ -9,7 +9,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-mod object;
+// mod object;
 mod parser;
 
 fn cli() -> Command {
