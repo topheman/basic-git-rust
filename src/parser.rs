@@ -1,6 +1,11 @@
 use anyhow::anyhow;
 use flate2::{self, read::ZlibDecoder};
-use nom::IResult;
+use nom::{
+    bytes::complete::{take_till, take_while},
+    error::ParseError,
+    multi::many_till,
+    IResult, Parser,
+};
 use std::io::Read;
 
 /// Decompress any git object into a Vec<u8>
@@ -24,11 +29,30 @@ pub fn parse_object_buf(buf: Vec<u8>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+pub fn split_at_code<'i>(
+    code: u8,
+) -> impl Parser<&'i [u8], (&'i [u8], &'i [u8]), nom::error::Error<&'i [u8]>> {
+    let match_code = move |num: u8| num == code;
+    move |input: &'i [u8]| -> IResult<&'i [u8], (&'i [u8], &'i [u8]), nom::error::Error<&'i [u8]>> {
+        let (tail, part1) = take_till(match_code)(input)?;
+        let (tail, part2) = take_till(match_code)(&tail[1..])?;
+        return Ok((tail, (part1, part2)));
+    }
+}
+
 pub fn parse_object_header<'i, 'j>(buf: &'i [u8]) -> IResult<&'i [u8], (&'j str, usize)> {
+    let foo: IResult<&[u8], &[u8]> = take_till(|num: u8| {
+        println!("{} {}", num, num == 32);
+        num == 32
+    })(buf);
+    println!("foo: {:?}", foo);
     return Ok((&[12, 12], (std::str::from_utf8(b"hello").unwrap(), 2000)));
 }
 
 mod tests {
+    use crate::parser::split_at_code;
+    use nom::Parser;
+
     use super::{parse_object_buf, parse_object_header, unpack_object};
 
     const GIT_COMMIT_BUFFER: [u8; 178] = [
@@ -58,6 +82,30 @@ mod tests {
         51, 57, 53, 49, 32, 43, 48, 49, 48, 48, 10, 10, 102, 101, 97, 116, 40, 42, 41, 58, 32, 97,
         100, 100, 32, 71, 105, 116, 79, 98, 106, 101, 99, 116, 115, 10,
     ];
+
+    #[test]
+    fn test_split_at_code_one_code() {
+        let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9].as_slice();
+        let tail = [].as_slice();
+        let part1 = [1, 2, 3, 4].as_slice();
+        let part2 = [5, 6, 7, 8, 9].as_slice();
+        assert_eq!(
+            split_at_code(32).parse(input_buffer).unwrap(),
+            (tail, (part1, part2))
+        )
+    }
+
+    #[test]
+    fn test_split_at_code_multi_code() {
+        let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9, 32, 10, 11, 12].as_slice();
+        let tail = [32, 10, 11, 12].as_slice(); // the tail is not empty if there are 32 more than once
+        let part1 = [1, 2, 3, 4].as_slice();
+        let part2 = [5, 6, 7, 8, 9].as_slice();
+        assert_eq!(
+            split_at_code(32).parse(input_buffer).unwrap(),
+            (tail, (part1, part2))
+        )
+    }
 
     #[test]
     fn test_unpack_object() {
