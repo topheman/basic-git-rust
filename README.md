@@ -16,3 +16,13 @@ Add the following alias to your `.zshrc` / `.bashrc`, it will:
 ```sh
 alias mygit=/path/to/your/repo/mygit.sh
 ```
+
+## Utilities
+
+If you cloned the repository from github, the git objects (commits, tree, ...) will be packed into `.git/objects/pack` and not present in `.git/objects` as individual objects.
+
+Run the following to unpack the objects:
+
+```sh
+./unpack.sh
+```
