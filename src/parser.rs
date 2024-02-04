@@ -8,6 +8,50 @@ use nom::{
 };
 use std::io::Read;
 
+#[derive(PartialEq, Debug)]
+pub enum GitObjectHeader {
+    Commit(usize),
+    Tree(usize),
+    Blob(usize),
+}
+
+impl GitObjectHeader {
+    /// Creates a GitObjectHeader from a Vec<u8> containing both the type and length
+    fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
+        let result = split_at_code(32).parse(&vec);
+        match result {
+            Ok(([], (object_type, object_length))) => {
+                // let foo = std::str::from_utf8(object_length)
+                //     .and_then(|foo| foo.parse::<u32>().and_then(|res| Ok(res, ())));
+                let object_length = std::str::from_utf8(object_length)?;
+                let object_length = object_length.parse::<u32>()?;
+                match object_type {
+                    &[99, 111, 109, 109, 105, 116] => {
+                        return Ok(GitObjectHeader::Commit(object_length as usize));
+                    }
+                    &[116, 114, 101, 101] => {
+                        return Ok(GitObjectHeader::Tree(object_length as usize));
+                    }
+                    &[98, 108, 111, 98] => {
+                        return Ok(GitObjectHeader::Blob(object_length as usize));
+                    }
+                    _ => {
+                        return Err(anyhow!("[GitObjectHeader] Unsupported object type"));
+                    }
+                }
+            }
+            Ok((_, (_, _))) => {
+                return Err(anyhow!(
+                    "[GitObjectHeader] Parse error, still data left after content type content length"
+                ));
+            }
+            Err(_) => {
+                return Err((anyhow!("[GitObjectHeader] parse error")));
+            }
+        }
+    }
+}
+
 /// Decompress any git object into a Vec<u8>
 pub fn unpack_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
     let mut decoder = ZlibDecoder::new(&buf[..]);
@@ -29,6 +73,14 @@ pub fn parse_object_buf(buf: Vec<u8>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// Splits a Vec<u8> at a specific code.
+///
+/// ```
+/// let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9].as_slice();
+/// let result = split_at_code(32).parse(input_buffer).unwrap();
+/// assert_eq!(result, ([].as_slice(), ([1, 2, 3, 4].as_slice(), [5, 6, 7, 8, 9].as_slice())) );
+/// ```
+///
 pub fn split_at_code<'i>(
     code: u8,
 ) -> impl Parser<&'i [u8], (&'i [u8], &'i [u8]), nom::error::Error<&'i [u8]>> {
@@ -46,6 +98,10 @@ pub fn parse_object_header<'i, 'j>(buf: &'i [u8]) -> IResult<&'i [u8], (&'j str,
         num == 32
     })(buf);
     println!("foo: {:?}", foo);
+    match foo {
+        Ok((tail, objectType)) => {}
+        _ => {}
+    }
     return Ok((&[12, 12], (std::str::from_utf8(b"hello").unwrap(), 2000)));
 }
 
@@ -53,7 +109,7 @@ mod tests {
     use crate::parser::split_at_code;
     use nom::Parser;
 
-    use super::{parse_object_buf, parse_object_header, unpack_object};
+    use super::{parse_object_buf, parse_object_header, unpack_object, GitObjectHeader};
 
     const GIT_COMMIT_BUFFER: [u8; 178] = [
         120, 1, 149, 142, 77, 10, 194, 48, 16, 133, 93, 231, 20, 179, 244, 7, 100, 210, 38, 77, 34,
@@ -117,17 +173,38 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_object_header_with_commit_object_type() {
-        // node -e "console.log('commit 248'.split('').map(c => c.charCodeAt(0)))"
+    fn test_create_git_object_header_commit() {
         let input_buffer: [u8; 10] = [99, 111, 109, 109, 105, 116, 32, 50, 52, 56]; // commit 248
-        let tail: [u8; 0] = [];
-        let object_type = std::str::from_utf8(b"commit").unwrap();
-        let size: usize = 248;
-        assert_eq!(
-            parse_object_header(&input_buffer).unwrap(),
-            (&tail.as_slice()[..], (object_type, size))
-        );
+        let result = GitObjectHeader::from_vec(&input_buffer).unwrap();
+        assert_eq!(result, GitObjectHeader::Commit(248));
     }
+
+    #[test]
+    fn test_create_git_object_header_tree() {
+        let input_buffer: [u8; 8] = [116, 114, 101, 101, 32, 51, 56, 50]; // tree 385
+        let result = GitObjectHeader::from_vec(&input_buffer).unwrap();
+        assert_eq!(result, GitObjectHeader::Tree(382));
+    }
+
+    #[test]
+    fn test_create_git_object_header_blob() {
+        let input_buffer: [u8; 11] = [98, 108, 111, 98, 32, 50, 52, 56, 51, 56, 50]; // blob 248385
+        let result = GitObjectHeader::from_vec(&input_buffer).unwrap();
+        assert_eq!(result, GitObjectHeader::Blob(248382));
+    }
+
+    // #[test]
+    // fn test_parse_object_header_with_commit_object_type() {
+    //     // node -e "console.log('commit 248'.split('').map(c => c.charCodeAt(0)))"
+    //     let input_buffer: [u8; 10] = [99, 111, 109, 109, 105, 116, 32, 50, 52, 56]; // commit 248
+    //     let tail: [u8; 0] = [];
+    //     let object_type = std::str::from_utf8(b"commit").unwrap();
+    //     let size: usize = 248;
+    //     assert_eq!(
+    //         parse_object_header(&input_buffer).unwrap(),
+    //         (&tail.as_slice()[..], (object_type, size))
+    //     );
+    // }
 
     // #[test]
     // fn git_commit_from_string() -> Result<(), anyhow::Error> {
