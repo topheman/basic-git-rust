@@ -1,11 +1,6 @@
 use anyhow::anyhow;
 use flate2::{self, read::ZlibDecoder};
-use nom::{
-    bytes::complete::{take_till, take_while},
-    error::ParseError,
-    multi::many_till,
-    IResult, Parser,
-};
+use nom::{bytes::complete::take_till, IResult, Parser};
 use std::io::Read;
 
 #[derive(PartialEq, Debug)]
@@ -92,24 +87,11 @@ pub fn split_at_code<'i>(
     }
 }
 
-pub fn parse_object_header<'i, 'j>(buf: &'i [u8]) -> IResult<&'i [u8], (&'j str, usize)> {
-    let foo: IResult<&[u8], &[u8]> = take_till(|num: u8| {
-        println!("{} {}", num, num == 32);
-        num == 32
-    })(buf);
-    println!("foo: {:?}", foo);
-    match foo {
-        Ok((tail, objectType)) => {}
-        _ => {}
-    }
-    return Ok((&[12, 12], (std::str::from_utf8(b"hello").unwrap(), 2000)));
-}
-
 mod tests {
     use crate::parser::split_at_code;
     use nom::Parser;
 
-    use super::{parse_object_buf, parse_object_header, unpack_object, GitObjectHeader};
+    use super::{parse_object_buf, unpack_object, GitObjectHeader};
 
     const GIT_COMMIT_BUFFER: [u8; 178] = [
         120, 1, 149, 142, 77, 10, 194, 48, 16, 133, 93, 231, 20, 179, 244, 7, 100, 210, 38, 77, 34,
@@ -192,19 +174,6 @@ mod tests {
         let result = GitObjectHeader::from_vec(&input_buffer).unwrap();
         assert_eq!(result, GitObjectHeader::Blob(248382));
     }
-
-    // #[test]
-    // fn test_parse_object_header_with_commit_object_type() {
-    //     // node -e "console.log('commit 248'.split('').map(c => c.charCodeAt(0)))"
-    //     let input_buffer: [u8; 10] = [99, 111, 109, 109, 105, 116, 32, 50, 52, 56]; // commit 248
-    //     let tail: [u8; 0] = [];
-    //     let object_type = std::str::from_utf8(b"commit").unwrap();
-    //     let size: usize = 248;
-    //     assert_eq!(
-    //         parse_object_header(&input_buffer).unwrap(),
-    //         (&tail.as_slice()[..], (object_type, size))
-    //     );
-    // }
 
     // #[test]
     // fn git_commit_from_string() -> Result<(), anyhow::Error> {
