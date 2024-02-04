@@ -10,6 +10,11 @@ pub enum GitObjectHeader {
     Blob(usize),
 }
 
+pub struct GitObject<'i> {
+    pub header: GitObjectHeader,
+    pub raw_data: &'i [u8],
+}
+
 impl GitObjectHeader {
     /// Creates a GitObjectHeader from a Vec<u8> containing both the type and length
     pub fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
@@ -41,7 +46,7 @@ impl GitObjectHeader {
                 ));
             }
             Err(_) => {
-                return Err((anyhow!("[GitObjectHeader] parse error")));
+                return Err(anyhow!("[GitObjectHeader] parse error"));
             }
         }
     }
@@ -56,16 +61,15 @@ pub fn unpack_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
 }
 
 /// Accepts the decompressed buffer and parses it
-pub fn parse_object_buf(buf: Vec<u8>) -> Result<(), anyhow::Error> {
-    let mut decoder = ZlibDecoder::new(&buf[..]);
-    let mut content = String::new();
-    decoder.read_to_string(&mut content)?;
-    // strip blob header before null caracter
-    let [object_type, object_string] = content.splitn(2, '\0').collect::<Vec<&str>>()[..] else {
-        return Err(anyhow!("Failed to extract object type"));
-    };
-    print!("{} {}", object_type, object_string);
-    Ok(())
+pub fn parse_object_buf(buf: &'static [u8]) -> Result<GitObject, anyhow::Error> {
+    let (_, (git_object_infos, git_object_raw_data)) = split_at_code(0).parse(buf)?;
+    println!("git_object_infos: {:?}", git_object_infos);
+    let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
+    println!("git_object_header: {:?}", git_object_header);
+    Ok(GitObject {
+        header: git_object_header,
+        raw_data: git_object_raw_data,
+    })
 }
 
 /// Splits a Vec<u8> at a specific code.
@@ -87,11 +91,13 @@ pub fn split_at_code<'i>(
     }
 }
 
+#[cfg(test)]
 mod tests {
-    use crate::parser::split_at_code;
+    // imports and const are marked as unused because of tests
+
     use nom::Parser;
 
-    use super::{parse_object_buf, unpack_object, GitObjectHeader};
+    use super::{split_at_code, unpack_object, GitObjectHeader};
 
     const GIT_COMMIT_BUFFER: [u8; 178] = [
         120, 1, 149, 142, 77, 10, 194, 48, 16, 133, 93, 231, 20, 179, 244, 7, 100, 210, 38, 77, 34,
@@ -178,6 +184,6 @@ mod tests {
     // #[test]
     // fn git_commit_from_string() -> Result<(), anyhow::Error> {
     //     parse_object_buf(content);
-    //     Ok(())
+    //     Ok(()) // todo
     // }
 }

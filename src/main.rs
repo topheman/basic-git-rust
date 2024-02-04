@@ -2,10 +2,6 @@ use anyhow::anyhow;
 use anyhow::bail;
 use clap::{Arg, Command};
 use nom::AsBytes;
-use nom::Parser;
-#[allow(unused_imports)]
-use std::env;
-#[allow(unused_imports)]
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,7 +10,7 @@ mod parser;
 
 use parser::unpack_object;
 
-use crate::parser::{split_at_code, GitObjectHeader};
+use crate::parser::{parse_object_buf, GitObject, GitObjectHeader};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -112,15 +108,23 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     let bytes = fs::read(&target_path)?;
                     println!("compressed: {:?}", bytes);
                     let content = unpack_object(bytes)?;
-                    {
-                        let content2 = content.clone().leak(); // todo weird lifetime hack due to parse bellow ...
-                        println!("unpacked: {:?}", content2);
-                        let (_, (git_object_infos, _)) = split_at_code(0).parse(content2)?;
-                        println!("git_object_infos: {:?}", git_object_infos);
-                        let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
-                        println!("git_object_header: {:?}", git_object_header);
+                    match parse_object_buf(content.clone().leak()) {
+                        Ok(GitObject {
+                            header: GitObjectHeader::Tree(_),
+                            ..
+                        }) => {
+                            eprintln!("Tree object not yet supported");
+                            std::process::exit(1);
+                        }
+                        Ok(GitObject { header, raw_data }) => {
+                            println!("header_infos: {:?}", header);
+                            println!("raw_data: {:?}", raw_data);
+                            println!("{}", std::str::from_utf8(raw_data.as_bytes()).unwrap());
+                        }
+                        Err(message) => {
+                            eprintln!("Failed parsing object {}", message);
+                        }
                     }
-                    println!("{}", std::str::from_utf8(content.as_bytes()).unwrap());
                 }
                 return anyhow::Ok(());
             }
