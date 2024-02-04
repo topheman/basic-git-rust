@@ -1,16 +1,20 @@
 use anyhow::anyhow;
 use anyhow::bail;
 use clap::{Arg, Command};
-use flate2::{self, read::ZlibDecoder};
+use nom::AsBytes;
+use nom::Parser;
 #[allow(unused_imports)]
 use std::env;
 #[allow(unused_imports)]
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 // mod object;
 mod parser;
+
+use parser::unpack_object;
+
+use crate::parser::{split_at_code, GitObjectHeader};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -92,38 +96,39 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                 _ => unreachable!(),
             }
         }
-        Some(("cat-file", submatches)) => {
-            match submatches.get_one::<String>("blob_sha") {
-                Some(blob_sha) => {
-                    if blob_sha.len() != 40 {
-                        return Err(anyhow!(
-                            "sha must contain 40 characters, passed {}",
-                            blob_sha
-                        ));
-                    }
-                    if let Ok(git_root) = find_git_root_from_cwd() {
-                        let target_path = git_root
-                            .join("objects")
-                            .join(blob_sha.get(0..2).unwrap())
-                            .join(blob_sha.get(2..).unwrap());
-                        let bytes = fs::read(target_path)?;
-                        println!("{:?}", bytes);
-                        let mut decoder = ZlibDecoder::new(&bytes[..]);
-                        let mut content = String::new();
-                        decoder.read_to_string(&mut content)?;
-                        println!("{:?}", content.as_bytes());
-                        // strip blob header before null caracter
-                        let blob_string = content.splitn(2, '\0').collect::<Vec<&str>>()[1];
-                        print!("{}", blob_string);
-                    }
-                    return anyhow::Ok(());
+        Some(("cat-file", submatches)) => match submatches.get_one::<String>("blob_sha") {
+            Some(blob_sha) => {
+                if blob_sha.len() != 40 {
+                    return Err(anyhow!(
+                        "sha must contain 40 characters, passed {}",
+                        blob_sha
+                    ));
                 }
-                None => {
-                    eprintln!("You must provide a sha");
-                    return anyhow::Ok(());
+                if let Ok(git_root) = find_git_root_from_cwd() {
+                    let target_path = git_root
+                        .join("objects")
+                        .join(blob_sha.get(0..2).unwrap())
+                        .join(blob_sha.get(2..).unwrap());
+                    let bytes = fs::read(&target_path)?;
+                    println!("compressed: {:?}", bytes);
+                    let content = unpack_object(bytes)?;
+                    {
+                        let content2 = content.clone().leak(); // todo weird lifetime hack due to parse bellow ...
+                        println!("unpacked: {:?}", content2);
+                        let (_, (git_object_infos, _)) = split_at_code(0).parse(content2)?;
+                        println!("git_object_infos: {:?}", git_object_infos);
+                        let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
+                        println!("git_object_header: {:?}", git_object_header);
+                    }
+                    println!("{}", std::str::from_utf8(content.as_bytes()).unwrap());
                 }
+                return anyhow::Ok(());
             }
-        }
+            None => {
+                eprintln!("You must provide a sha");
+                return anyhow::Ok(());
+            }
+        },
         Some((ext, _)) => {
             println!("unknown command \"{}\"", ext);
             anyhow::Ok(())

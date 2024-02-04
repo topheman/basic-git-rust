@@ -12,7 +12,7 @@ pub enum GitObjectHeader {
 
 impl GitObjectHeader {
     /// Creates a GitObjectHeader from a Vec<u8> containing both the type and length
-    fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
+    pub fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
         let result = split_at_code(32).parse(&vec);
         match result {
             Ok(([], (object_type, object_length))) => {
