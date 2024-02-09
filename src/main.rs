@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 // mod object;
 mod parser;
 
-use parser::unpack_object;
+use parser::decompress_object;
 
 use crate::parser::{parse_object_buf, GitObject, GitObjectHeader};
 
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                         .join(blob_sha.get(2..).unwrap());
                     let bytes = fs::read(&target_path)?;
                     println!("compressed: {:?}", bytes);
-                    let content = unpack_object(bytes)?;
+                    let content = decompress_object(bytes)?;
                     match parse_object_buf(content.clone().leak()) {
                         Ok(GitObject {
                             header: GitObjectHeader::Tree(_),

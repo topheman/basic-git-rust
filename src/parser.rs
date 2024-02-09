@@ -53,7 +53,7 @@ impl GitObjectHeader {
 }
 
 /// Decompress any git object into a Vec<u8>
-pub fn unpack_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
+pub fn decompress_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
     let mut decoder = ZlibDecoder::new(&buf[..]);
     let mut content = Vec::new();
     decoder.read_to_end(&mut content)?;
@@ -97,7 +97,7 @@ mod tests {
 
     use nom::Parser;
 
-    use super::{split_at_code, unpack_object, GitObjectHeader};
+    use super::{decompress_object, split_at_code, GitObjectHeader};
 
     const GIT_COMMIT_BUFFER: [u8; 178] = [
         120, 1, 149, 142, 77, 10, 194, 48, 16, 133, 93, 231, 20, 179, 244, 7, 100, 210, 38, 77, 34,
@@ -111,7 +111,7 @@ mod tests {
         222, 110, 14, 16, 137, 224, 58, 200, 45, 61, 56, 203, 172, 62, 134, 170, 80, 70,
     ];
 
-    const GIT_COMMIT_BUFFER_UNPACKED: [u8; 259] = [
+    const GIT_COMMIT_BUFFER_UNCOMPRESSED: [u8; 259] = [
         99, 111, 109, 109, 105, 116, 32, 50, 52, 56, 0, 116, 114, 101, 101, 32, 49, 55, 55, 49,
         101, 98, 48, 48, 101, 97, 97, 49, 55, 55, 100, 57, 52, 100, 55, 50, 52, 102, 57, 99, 100,
         50, 102, 98, 97, 56, 101, 54, 57, 56, 101, 57, 55, 102, 53, 49, 10, 112, 97, 114, 101, 110,
@@ -152,11 +152,11 @@ mod tests {
     }
 
     #[test]
-    fn test_unpack_object() {
+    fn test_decompress_object() {
         let input_buffer = Vec::from(GIT_COMMIT_BUFFER);
         assert_eq!(
-            unpack_object(input_buffer).unwrap(),
-            Vec::from(GIT_COMMIT_BUFFER_UNPACKED)
+            decompress_object(input_buffer).unwrap(),
+            Vec::from(GIT_COMMIT_BUFFER_UNCOMPRESSED)
         )
     }
 
