@@ -108,10 +108,12 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     let content = decompress_object(bytes)?;
                     match GitObject::from_vec(&content) {
                         Ok(GitObject {
-                            header: GitObjectHeader::Tree(_),
-                            ..
+                            header: GitObjectHeader::Tree(length),
+                            raw_data,
                         }) => {
-                            eprintln!("Tree object not yet supported");
+                            println!("header_infos: {:?}", GitObjectHeader::Tree(length));
+                            println!("raw_data: {:?}", raw_data);
+                            eprintln!("Tree object display not yet supported");
                             std::process::exit(1);
                         }
                         Ok(GitObject { header, raw_data }) => {
