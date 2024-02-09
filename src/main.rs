@@ -1,11 +1,9 @@
 use anyhow::anyhow;
 use anyhow::bail;
 use clap::{Arg, Command};
-use nom::AsBytes;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// mod object;
 mod parser;
 
 use parser::decompress_object;
@@ -108,8 +106,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     let bytes = fs::read(&target_path)?;
                     println!("compressed: {:?}", bytes);
                     let content = decompress_object(bytes)?;
-                    match GitObject::from_vec(content.clone().leak()) {
-                        // todo is it possible not to leak ? due to parser::split_at_code
+                    match GitObject::from_vec(&content) {
                         Ok(GitObject {
                             header: GitObjectHeader::Tree(_),
                             ..
@@ -120,7 +117,7 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                         Ok(GitObject { header, raw_data }) => {
                             println!("header_infos: {:?}", header);
                             println!("raw_data: {:?}", raw_data);
-                            println!("{}", std::str::from_utf8(raw_data.as_bytes()).unwrap());
+                            println!("{}", std::str::from_utf8(&raw_data).unwrap());
                         }
                         Err(message) => {
                             eprintln!("Failed parsing object {}", message);

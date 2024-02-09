@@ -1,6 +1,6 @@
 use anyhow::anyhow;
+use bstr::ByteSlice;
 use flate2::{self, read::ZlibDecoder};
-use nom::{bytes::complete::take_till, IResult, Parser};
 use std::io::Read;
 
 #[derive(PartialEq, Debug)]
@@ -10,55 +10,38 @@ pub enum GitObjectHeader {
     Blob(usize),
 }
 
-pub struct GitObject<'i> {
+pub struct GitObject {
     pub header: GitObjectHeader,
-    pub raw_data: &'i [u8],
+    pub raw_data: Vec<u8>,
 }
 
 impl GitObjectHeader {
     /// Creates a GitObjectHeader from a Vec<u8> containing both the type and length
     pub fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
-        let result = split_at_code(32).parse(&vec);
-        match result {
-            Ok(([], (object_type, object_length))) => {
-                // let foo = std::str::from_utf8(object_length)
-                //     .and_then(|foo| foo.parse::<u32>().and_then(|res| Ok(res, ())));
-                let object_length = std::str::from_utf8(object_length)?;
-                let object_length = object_length.parse::<u32>()?;
-                match object_type {
-                    &[99, 111, 109, 109, 105, 116] => {
-                        return Ok(GitObjectHeader::Commit(object_length as usize));
-                    }
-                    &[116, 114, 101, 101] => {
-                        return Ok(GitObjectHeader::Tree(object_length as usize));
-                    }
-                    &[98, 108, 111, 98] => {
-                        return Ok(GitObjectHeader::Blob(object_length as usize));
-                    }
-                    _ => {
-                        return Err(anyhow!("[GitObjectHeader] Unsupported object type"));
-                    }
-                }
+        let (object_type, object_length) = split_at_code(32, &vec);
+        let object_length = std::str::from_utf8(object_length.as_slice())?;
+        let object_length = object_length.parse::<u32>()?;
+        match object_type.as_slice() {
+            &[99, 111, 109, 109, 105, 116] => {
+                return Ok(GitObjectHeader::Commit(object_length as usize));
             }
-            Ok((_, (_, _))) => {
-                return Err(anyhow!(
-                    "[GitObjectHeader] Parse error, still data left after content type content length"
-                ));
+            &[116, 114, 101, 101] => {
+                return Ok(GitObjectHeader::Tree(object_length as usize));
             }
-            Err(_) => {
-                return Err(anyhow!("[GitObjectHeader] parse error"));
+            &[98, 108, 111, 98] => {
+                return Ok(GitObjectHeader::Blob(object_length as usize));
+            }
+            _ => {
+                return Err(anyhow!("[GitObjectHeader] Unsupported object type"));
             }
         }
     }
 }
 
-impl GitObject<'_> {
+impl GitObject {
     /// Creates a GitObject from a Vec<u8> containing de decompressed buffer of the git object
-    pub fn from_vec(vec: &'static [u8]) -> Result<Self, anyhow::Error> {
-        // todo is it possible not to leak ? due to parser::split_at_code
-        // let owned_vec = vec.clone().to_owned().as_slice();
-        let (_, (git_object_infos, git_object_raw_data)) = split_at_code(0).parse(vec)?;
-        // std::mem::drop(owned_vec);
+    pub fn from_vec(vec: &[u8]) -> Result<Self, anyhow::Error> {
+        let (git_object_infos, git_object_raw_data) = split_at_code(0, vec);
         println!("git_object_infos: {:?}", git_object_infos);
         let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
         println!("git_object_header: {:?}", git_object_header);
@@ -77,30 +60,18 @@ pub fn decompress_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
     Ok(content)
 }
 
-/// Splits a Vec<u8> at a specific code.
-///
-/// ```
-/// let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9].as_slice();
-/// let result = split_at_code(32).parse(input_buffer).unwrap();
-/// assert_eq!(result, ([].as_slice(), ([1, 2, 3, 4].as_slice(), [5, 6, 7, 8, 9].as_slice())) );
-/// ```
-///
-pub fn split_at_code<'i>(
-    code: u8,
-) -> impl Parser<&'i [u8], (&'i [u8], &'i [u8]), nom::error::Error<&'i [u8]>> {
-    let match_code = move |num: u8| num == code;
-    move |input: &'i [u8]| -> IResult<&'i [u8], (&'i [u8], &'i [u8]), nom::error::Error<&'i [u8]>> {
-        let (tail, part1) = take_till(match_code)(input)?;
-        let (tail, part2) = take_till(match_code)(&tail[1..])?;
-        return Ok((tail, (part1, part2)));
+pub fn split_at_code(code: u8, input: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let pattern: [u8; 1] = [code];
+    match input.split_once_str(&pattern) {
+        Some((part1, part2)) => return (part1.to_owned(), part2.to_owned()),
+        _ => {
+            return (Vec::new().to_owned(), Vec::new().to_owned());
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // imports and const are marked as unused because of tests
-
-    use nom::Parser;
 
     use super::{decompress_object, split_at_code, GitObjectHeader};
 
@@ -135,25 +106,23 @@ mod tests {
     #[test]
     fn test_split_at_code_one_code() {
         let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9].as_slice();
-        let tail = [].as_slice();
         let part1 = [1, 2, 3, 4].as_slice();
         let part2 = [5, 6, 7, 8, 9].as_slice();
         assert_eq!(
-            split_at_code(32).parse(input_buffer).unwrap(),
-            (tail, (part1, part2))
-        )
+            split_at_code(32, input_buffer),
+            (part1.to_vec(), part2.to_vec())
+        );
     }
 
     #[test]
     fn test_split_at_code_multi_code() {
         let input_buffer = [1, 2, 3, 4, 32, 5, 6, 7, 8, 9, 32, 10, 11, 12].as_slice();
-        let tail = [32, 10, 11, 12].as_slice(); // the tail is not empty if there are 32 more than once
         let part1 = [1, 2, 3, 4].as_slice();
-        let part2 = [5, 6, 7, 8, 9].as_slice();
+        let part2 = [5, 6, 7, 8, 9, 32, 10, 11, 12].as_slice();
         assert_eq!(
-            split_at_code(32).parse(input_buffer).unwrap(),
-            (tail, (part1, part2))
-        )
+            split_at_code(32, input_buffer),
+            (part1.to_vec(), part2.to_vec())
+        );
     }
 
     #[test]
