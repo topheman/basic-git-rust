@@ -10,7 +10,7 @@ mod parser;
 
 use parser::decompress_object;
 
-use crate::parser::{parse_object_buf, GitObject, GitObjectHeader};
+use crate::parser::{GitObject, GitObjectHeader};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -108,7 +108,8 @@ fn main() -> anyhow::Result<(), anyhow::Error> {
                     let bytes = fs::read(&target_path)?;
                     println!("compressed: {:?}", bytes);
                     let content = decompress_object(bytes)?;
-                    match parse_object_buf(content.clone().leak()) {
+                    match GitObject::from_vec(content.clone().leak()) {
+                        // todo is it possible not to leak ? due to parser::split_at_code
                         Ok(GitObject {
                             header: GitObjectHeader::Tree(_),
                             ..

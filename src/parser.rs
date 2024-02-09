@@ -52,24 +52,29 @@ impl GitObjectHeader {
     }
 }
 
+impl GitObject<'_> {
+    /// Creates a GitObject from a Vec<u8> containing de decompressed buffer of the git object
+    pub fn from_vec(vec: &'static [u8]) -> Result<Self, anyhow::Error> {
+        // todo is it possible not to leak ? due to parser::split_at_code
+        // let owned_vec = vec.clone().to_owned().as_slice();
+        let (_, (git_object_infos, git_object_raw_data)) = split_at_code(0).parse(vec)?;
+        // std::mem::drop(owned_vec);
+        println!("git_object_infos: {:?}", git_object_infos);
+        let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
+        println!("git_object_header: {:?}", git_object_header);
+        Ok(GitObject {
+            header: git_object_header,
+            raw_data: git_object_raw_data,
+        })
+    }
+}
+
 /// Decompress any git object into a Vec<u8>
 pub fn decompress_object(buf: Vec<u8>) -> Result<Vec<u8>, anyhow::Error> {
     let mut decoder = ZlibDecoder::new(&buf[..]);
     let mut content = Vec::new();
     decoder.read_to_end(&mut content)?;
     Ok(content)
-}
-
-/// Accepts the decompressed buffer and parses it
-pub fn parse_object_buf(buf: &'static [u8]) -> Result<GitObject, anyhow::Error> {
-    let (_, (git_object_infos, git_object_raw_data)) = split_at_code(0).parse(buf)?;
-    println!("git_object_infos: {:?}", git_object_infos);
-    let git_object_header = GitObjectHeader::from_vec(&git_object_infos)?;
-    println!("git_object_header: {:?}", git_object_header);
-    Ok(GitObject {
-        header: git_object_header,
-        raw_data: git_object_raw_data,
-    })
 }
 
 /// Splits a Vec<u8> at a specific code.
@@ -180,10 +185,4 @@ mod tests {
         let result = GitObjectHeader::from_vec(&input_buffer).unwrap();
         assert_eq!(result, GitObjectHeader::Blob(248382));
     }
-
-    // #[test]
-    // fn git_commit_from_string() -> Result<(), anyhow::Error> {
-    //     parse_object_buf(content);
-    //     Ok(()) // todo
-    // }
 }
