@@ -1,4 +1,4 @@
-# basic-rust-git
+# basic-git-rust
 
 This is a very basic and partial rust implementation of git.
 
