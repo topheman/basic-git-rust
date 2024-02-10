@@ -2,13 +2,15 @@ use anyhow::anyhow;
 use anyhow::bail;
 use clap::{Arg, Command};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 mod parser;
+mod utils;
 
 use parser::decompress_object;
 
 use crate::parser::{GitObject, GitObjectHeader};
+use crate::utils::io::{find_git_root, find_git_root_from_cwd};
 
 fn cli() -> Command {
     Command::new("mygit")
@@ -29,29 +31,6 @@ fn cli() -> Command {
                         .help("Pretty-print the contents of <object> based on its type."),
                 ),
         )
-}
-
-fn find_git_root(dir: &PathBuf) -> anyhow::Result<PathBuf> {
-    let mut git_root = dir.as_path();
-    loop {
-        match std::fs::metadata(git_root.join(".git")) {
-            Ok(m) if m.is_dir() => {
-                break;
-            }
-            Ok(_) | Err(_) => {
-                // try one level up
-                git_root = git_root
-                    .parent()
-                    .ok_or_else(|| anyhow!("Failed to detect git directory"))?;
-            }
-        }
-    }
-    Ok(git_root.join(".git").to_path_buf())
-}
-
-fn find_git_root_from_cwd() -> anyhow::Result<PathBuf> {
-    let cwd = std::env::current_dir().expect("Expect retrieving current working directory");
-    return find_git_root(&cwd);
 }
 
 fn main() -> anyhow::Result<(), anyhow::Error> {
