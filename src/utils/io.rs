@@ -23,3 +23,7 @@ pub fn find_git_root_from_cwd() -> anyhow::Result<PathBuf> {
     let cwd = std::env::current_dir().expect("Expect retrieving current working directory");
     return find_git_root(&cwd);
 }
+
+pub fn read<P: std::convert::AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
+    std::fs::read(path)
+}
