@@ -39,7 +39,61 @@ fn parse_git_rev_spec(git_rev_spec: String) -> GitRevSpecParsed {
     };
 }
 
-#[cfg(test)]
+mod parser_helpers {
+    use nom::{bytes::complete::*, combinator::*, IResult};
+
+    pub fn is_caret(c: char) -> bool {
+        c == '^'
+    }
+    pub fn is_tilde(c: char) -> bool {
+        c == '~'
+    }
+    pub fn is_at(c: char) -> bool {
+        c == '@'
+    }
+    fn take_rev_spec(input: &str) -> IResult<&str, &str> {
+        take_while(|c| !is_caret(c) && !is_tilde(c) && !is_at(c))(input)
+    }
+
+    #[cfg(test)]
+    mod tests_parser_helpers {
+        use bstr::ByteSlice;
+        use nom::AsBytes;
+
+        use super::*;
+
+        #[test]
+        fn test_take_rev_spec_carets() {
+            assert_eq!(
+                take_rev_spec("feat/master^^").unwrap(),
+                ("^^", "feat/master")
+            );
+        }
+        #[test]
+        fn test_take_rev_spec_carets_and_tilde() {
+            assert_eq!(
+                take_rev_spec("feat/master^^~^~").unwrap(),
+                ("^^~^~", "feat/master")
+            );
+        }
+        #[test]
+        fn test_take_rev_spec_carets_tilde_with_number() {
+            assert_eq!(
+                take_rev_spec("feat/master^~3^^").unwrap(),
+                ("^~3^^", "feat/master")
+            );
+        }
+        #[test]
+        fn test_take_rev_spec_at() {
+            assert_eq!(
+                take_rev_spec("feat/master@{3}").unwrap(),
+                ("@{3}", "feat/master")
+            );
+        }
+    }
+}
+
+#[cfg(all(test, not(feature = "ignore_tests")))]
 mod tests_git_rev_spec_parsed {
     use super::{parse_git_rev_spec, GitRevSpecParsed};
 
@@ -166,7 +220,7 @@ fn resolve_git_rev_spec_parsed(
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "ignore_tests")))]
 mod tests_resolve_git_rev_spec_parsed {
     use super::{resolve_git_rev_spec_parsed, GitRevSpecParsed, GitRevSpecResolved};
 
