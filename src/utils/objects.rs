@@ -32,26 +32,37 @@ struct GitRevSpecParsed {
     modifier: Option<String>,
 }
 
-fn parse_git_rev_spec(git_rev_spec: String) -> GitRevSpecParsed {
-    return GitRevSpecParsed {
-        value: "foo".to_string(),
-        modifier: None,
-    };
+fn parse_git_rev_spec(
+    git_rev_spec: &str,
+) -> Result<GitRevSpecParsed, nom::Err<nom::error::Error<&str>>> {
+    match parser_helpers::take_rev_spec(git_rev_spec) {
+        Ok((modifier, value)) => {
+            return Ok(GitRevSpecParsed {
+                value: value.to_string(),
+                modifier: if !modifier.is_empty() {
+                    Some(modifier.to_string())
+                } else {
+                    None
+                },
+            })
+        }
+        Err(e) => return Err(e),
+    }
 }
 
 mod parser_helpers {
     use nom::{bytes::complete::*, combinator::*, IResult};
 
-    pub fn is_caret(c: char) -> bool {
+    fn is_caret(c: char) -> bool {
         c == '^'
     }
-    pub fn is_tilde(c: char) -> bool {
+    fn is_tilde(c: char) -> bool {
         c == '~'
     }
-    pub fn is_at(c: char) -> bool {
+    fn is_at(c: char) -> bool {
         c == '@'
     }
-    fn take_rev_spec(input: &str) -> IResult<&str, &str> {
+    pub fn take_rev_spec(input: &str) -> IResult<&str, &str> {
         take_while(|c| !is_caret(c) && !is_tilde(c) && !is_at(c))(input)
     }
 
@@ -93,14 +104,15 @@ mod parser_helpers {
     }
 }
 
-#[cfg(all(test, not(feature = "ignore_tests")))]
+// #[cfg(all(test, not(feature = "ignore_tests")))]
+#[cfg(test)]
 mod tests_git_rev_spec_parsed {
     use super::{parse_git_rev_spec, GitRevSpecParsed};
 
     #[test]
     fn test_parse_parse_git_rev_spec() {
         assert_eq!(
-            parse_git_rev_spec("HEAD".to_string()),
+            parse_git_rev_spec("HEAD").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: None
@@ -111,7 +123,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_caret() {
         assert_eq!(
-            parse_git_rev_spec("HEAD^".to_string()),
+            parse_git_rev_spec("HEAD^").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("^".to_string())
@@ -122,7 +134,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_double_caret() {
         assert_eq!(
-            parse_git_rev_spec("HEAD^^".to_string()),
+            parse_git_rev_spec("HEAD^^").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("^^".to_string())
@@ -133,7 +145,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_tilde() {
         assert_eq!(
-            parse_git_rev_spec("HEAD~".to_string()),
+            parse_git_rev_spec("HEAD~").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("~".to_string())
@@ -144,7 +156,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_double_tilde() {
         assert_eq!(
-            parse_git_rev_spec("HEAD~~".to_string()),
+            parse_git_rev_spec("HEAD~~").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("~~".to_string())
@@ -155,7 +167,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_at() {
         assert_eq!(
-            parse_git_rev_spec("HEAD@{5}".to_string()),
+            parse_git_rev_spec("HEAD@{5}").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("@{5}".to_string())
@@ -167,7 +179,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_at_with_at_in_branch_name() {
         assert_eq!(
-            parse_git_rev_spec("feat/@toto@{3}".to_string()), // we won't support shis use case - too complicated / too little
+            parse_git_rev_spec("feat/@toto@{3}").unwrap(), // we won't support shis use case - too complicated / too little
             GitRevSpecParsed {
                 value: "feat/@toto".to_string(),
                 modifier: Some("@{3}".to_string())
@@ -178,7 +190,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_combine_modifiers_1() {
         assert_eq!(
-            parse_git_rev_spec("HEAD@{5}~2^".to_string()),
+            parse_git_rev_spec("HEAD@{5}~2^").unwrap(),
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("@{5}~2^".to_string())
@@ -189,7 +201,7 @@ mod tests_git_rev_spec_parsed {
     #[test]
     fn test_parse_parse_git_rev_spec_combine_modifiers_2() {
         assert_eq!(
-            parse_git_rev_spec("HEAD^~2@{5}".to_string()), // WARN this one is impossible, you can't have `@{n}` at the end - to handle when parsing modifiers
+            parse_git_rev_spec("HEAD^~2@{5}").unwrap(), // WARN this one is impossible, you can't have `@{n}` at the end - to handle when parsing modifiers
             GitRevSpecParsed {
                 value: "HEAD".to_string(),
                 modifier: Some("^~2@{5}".to_string())
