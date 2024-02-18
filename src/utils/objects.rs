@@ -21,6 +21,7 @@ fn resolve_head(
 
 #[derive(PartialEq)]
 enum GitRevSpecType {
+    Head,
     CommitSha,
     BranchName,
     TagName,
@@ -43,6 +44,11 @@ struct GitRevSpecParsed {
 impl GitRevSpecParsed {
     fn to_path_buf(&self, git_rev_spec_type: GitRevSpecType) -> Result<PathBuf, anyhow::Error> {
         match git_rev_spec_type {
+            GitRevSpecType::Head => {
+                let mut target_path = PathBuf::new();
+                target_path.push("HEAD");
+                return Ok(target_path);
+            }
             GitRevSpecType::CommitSha => {
                 if self.value.len() != 40 {
                     return Err(anyhow!("Not a commitsha"));
@@ -88,6 +94,22 @@ impl GitRevSpecParsed {
 #[cfg(test)]
 mod test_git_rev_spec_parsed_impl {
     use super::*;
+
+    #[test]
+    fn test_to_path_buffer_head_ok() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "HEAD".to_string(),
+            modifier: None,
+        };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path.join("HEAD");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::Head)
+                .unwrap(),
+            resolved_path
+        )
+    }
 
     #[test]
     fn test_to_path_buffer_commit_ok() {
