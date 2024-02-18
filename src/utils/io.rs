@@ -28,6 +28,16 @@ pub fn read<P: std::convert::AsRef<std::path::Path>>(path: P) -> std::io::Result
     std::fs::read(path)
 }
 
+pub fn read_as_string<P: std::convert::AsRef<std::path::Path>>(
+    path: P,
+) -> Result<String, anyhow::Error> {
+    match std::fs::read(path) {
+        Ok(content) => String::from_utf8(content)
+            .map_err(|_| anyhow::anyhow!("Could not read file content in utf8")),
+        Err(_) => Err(anyhow::anyhow!("Could not read file")),
+    }
+}
+
 pub fn file_exists<P: std::convert::AsRef<std::path::Path>>(path: P) -> bool {
     match std::fs::metadata(path) {
         Ok(metadata) => {

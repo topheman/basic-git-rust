@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bstr::ByteSlice;
 use std::path::PathBuf;
 
 pub fn resolve_git_rev_spec(git_rev_spec: String) -> Result<String, anyhow::Error> {
@@ -422,9 +423,18 @@ enum GitRevSpecResolved {
 
 fn resolve_git_rev_spec_parsed(
     git_rev_spec_parsed: GitRevSpecParsed,
-    read: fn(&PathBuf) -> std::io::Result<Vec<u8>>,
+    read_as_string: fn(&PathBuf) -> Result<String, anyhow::Error>,
     file_exists: fn(&PathBuf) -> bool,
 ) -> Result<GitRevSpecResolved, anyhow::Error> {
+    if let Ok(path_buf_head) = git_rev_spec_parsed.to_path_buf(GitRevSpecType::Head) {
+        match read_as_string(&path_buf_head) {
+            Ok(head_content) => {
+                // todo later - parse it and resolve it
+                return Ok(GitRevSpecResolved::Match(head_content));
+            }
+            _ => {}
+        }
+    }
     return Ok(GitRevSpecResolved::Match(
         "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
     ));
@@ -448,31 +458,28 @@ mod tests_resolve_git_rev_spec_parsed {
     const GIT_REFS_TAGS_AMBIGUOUS: &str = "ef916326703d7dcd9cab6b9ba6bb4793912508af";
     const MOCK_COMMIT_CONTENT: &str = "mock commit content"; // todo should be formatted+compressed but not necessary for the test
 
-    fn mock_read(path: &std::path::PathBuf) -> std::io::Result<Vec<u8>> {
+    fn mock_read_as_string(path: &std::path::PathBuf) -> Result<String, anyhow::Error> {
         match path.to_str() {
-            Some(".git/HEAD") => Ok(GIT_HEAD.as_bytes().to_owned()),
-            Some(".git/refs/heads/master") => Ok(GIT_REFS_HEADS_MASTER.as_bytes().to_owned()),
-            Some(".git/refs/heads/feat/foo") => Ok(GIT_REFS_HEADS_FEAT_FOO.as_bytes().to_owned()),
-            Some(".git/refs/tags/v0.1.0") => Ok(GIT_REFS_TAGS_V0_1_0.as_bytes().to_owned()),
-            Some(".git/refs/heads/ambiguous") => Ok(GIT_REFS_HEADS_AMBIGUOUS.as_bytes().to_owned()),
-            Some(".git/refs/tags/ambiguous") => Ok(GIT_REFS_TAGS_AMBIGUOUS.as_bytes().to_owned()),
+            Some(".git/HEAD") => Ok(GIT_HEAD.to_string()),
+            Some(".git/refs/heads/master") => Ok(GIT_REFS_HEADS_MASTER.to_string()),
+            Some(".git/refs/heads/feat/foo") => Ok(GIT_REFS_HEADS_FEAT_FOO.to_string()),
+            Some(".git/refs/tags/v0.1.0") => Ok(GIT_REFS_TAGS_V0_1_0.to_string()),
+            Some(".git/refs/heads/ambiguous") => Ok(GIT_REFS_HEADS_AMBIGUOUS.to_string()),
+            Some(".git/refs/tags/ambiguous") => Ok(GIT_REFS_TAGS_AMBIGUOUS.to_string()),
             Some(".git/objects/af/648df27488d558e794eb1e25304a90930d9d38") => {
-                Ok(MOCK_COMMIT_CONTENT.as_bytes().to_owned())
+                Ok(MOCK_COMMIT_CONTENT.to_string())
             }
             Some(".git/objects/ee/a961ba163d275c90fd6ba57d70754809b428a1") => {
-                Ok(MOCK_COMMIT_CONTENT.as_bytes().to_owned())
+                Ok(MOCK_COMMIT_CONTENT.to_string())
             }
             Some(".git/objects/b8/2608c0bb54a84ae7b3d38112ccf1cb50aebe8d") => {
-                Ok(MOCK_COMMIT_CONTENT.as_bytes().to_owned())
+                Ok(MOCK_COMMIT_CONTENT.to_string())
             }
-            Some(_) | None => Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("File not found - {:?}", path),
-            )),
+            Some(_) | None => Err(anyhow::anyhow!("File not found - {:?}", path)),
         }
     }
     fn mock_file_exits(path: &std::path::PathBuf) -> bool {
-        match mock_read(path) {
+        match mock_read_as_string(path) {
             Ok(_) => true,
             Err(_) => false,
         }
@@ -486,7 +493,7 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: GIT_REFS_HEADS_MASTER.to_string(),
                     modifier: None,
                 },
-                mock_read,
+                mock_read_as_string,
                 mock_file_exits
             )
             .unwrap(),
@@ -502,7 +509,7 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "HEAD".to_string(),
                     modifier: None,
                 },
-                mock_read,
+                mock_read_as_string,
                 mock_file_exits
             )
             .unwrap(),
@@ -518,7 +525,7 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "feat/foo".to_string(),
                     modifier: None,
                 },
-                mock_read,
+                mock_read_as_string,
                 mock_file_exits
             )
             .unwrap(),
@@ -534,7 +541,7 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "v0.1.0".to_string(),
                     modifier: None,
                 },
-                mock_read,
+                mock_read_as_string,
                 mock_file_exits
             )
             .unwrap(),
