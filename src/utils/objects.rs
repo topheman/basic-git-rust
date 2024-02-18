@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::path::PathBuf;
 
 pub fn resolve_git_rev_spec(git_rev_spec: String) -> Result<String, anyhow::Error> {
@@ -18,6 +19,12 @@ fn resolve_head(
     }
 }
 
+enum GitRevSpecType {
+    CommitSha,
+    BranchName,
+    TagName,
+}
+
 /// This is the result of parsing a git_rev_spec out of the command line like
 /// - `"HEAD"` -> `GitRevSpecParsed { value: "HEAD", modifier: None }`
 /// - `"HEAD^"` -> `GitRevSpecParsed { value: "HEAD", modifier: Some("^") }`
@@ -30,6 +37,92 @@ fn resolve_head(
 struct GitRevSpecParsed {
     value: String,
     modifier: Option<String>,
+}
+
+impl GitRevSpecParsed {
+    fn to_path_buf(&self, git_rev_spec_type: GitRevSpecType) -> Result<PathBuf, anyhow::Error> {
+        match git_rev_spec_type {
+            GitRevSpecType::CommitSha => {
+                if self.value.len() != 40 {
+                    return Err(anyhow!("Not a commitsha"));
+                }
+                let value = &self.value;
+                let target_path = value
+                    .get(0..2)
+                    .and_then(|first_fragment| {
+                        value
+                            .get(2..)
+                            .and_then(|second_fragment| Some((first_fragment, second_fragment)))
+                    })
+                    .and_then(|(first_fragment, second_fragment)| {
+                        let target_path = PathBuf::new();
+                        let target_path = target_path
+                            .join("objects")
+                            .join(first_fragment)
+                            .join(second_fragment);
+                        return Some(target_path);
+                    });
+                if target_path.is_some() {
+                    return Ok(target_path.unwrap());
+                }
+                return Err(anyhow!("Not a commitsha"));
+            }
+            GitRevSpecType::BranchName => todo!(),
+            GitRevSpecType::TagName => todo!(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_git_rev_spec_parsed_impl {
+    use super::*;
+
+    #[test]
+    fn test_to_path_buffer_commit_ok() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
+            modifier: None,
+        };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path
+            .join("objects")
+            .join("af")
+            .join("648df27488d558e794eb1e25304a90930d9d38");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::CommitSha)
+                .unwrap(),
+            resolved_path
+        )
+    }
+
+    #[test]
+    fn test_to_path_buffer_commit_ko_not_correct_length() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "af648df27488d558e794eb".to_string(),
+            modifier: None,
+        };
+
+        let error = git_rev_spec_parsed
+            .to_path_buf(GitRevSpecType::CommitSha)
+            .unwrap_err();
+
+        assert_eq!(format!("{}", error.root_cause()), "Not a commitsha");
+    }
+
+    #[test]
+    fn test_to_path_buffer_commit_ko_not_correct_length() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "af648df27488d558e794eb".to_string(),
+            modifier: None,
+        };
+
+        let error = git_rev_spec_parsed
+            .to_path_buf(GitRevSpecType::CommitSha)
+            .unwrap_err();
+
+        assert_eq!(format!("{}", error.root_cause()), "Not a commitsha");
+    }
 }
 
 fn parse_git_rev_spec(
@@ -230,8 +323,14 @@ fn resolve_git_rev_spec_parsed(
     file_exists: fn(&PathBuf) -> bool,
 ) -> Result<GitRevSpecResolved, anyhow::Error> {
     return Ok(GitRevSpecResolved::Match(
-        ("af648df27488d558e794eb1e25304a90930d9d38".to_string()),
+        "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
     ));
+}
+
+fn try_resolve_git_rev_spec_parsed_commit(
+    git_rev_spec_parsed: GitRevSpecParsed,
+    file_exists: fn(&PathBuf) -> bool,
+) {
 }
 
 #[cfg(all(test, not(feature = "ignore_tests")))]
