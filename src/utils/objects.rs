@@ -219,17 +219,19 @@ mod tests_git_rev_spec_parsed {
 /// - `GitRevSpecParsed { value: "v0.1.0", modifier: Some("~3") }` -> `GitRevSpecResolved { value: "somecommitsha" }`
 /// - `GitRevSpecParsed { value: "feat/foo", modifier: Some("@{5}") }` -> `GitRevSpecResolved { value: "somecommitsha" }`
 #[derive(PartialEq, Debug)]
-struct GitRevSpecResolved {
-    value: String,
+enum GitRevSpecResolved {
+    Match(String),
+    Ambiguous(String),
 }
 
 fn resolve_git_rev_spec_parsed(
     git_rev_spec_parsed: GitRevSpecParsed,
     read: fn(&PathBuf) -> std::io::Result<Vec<u8>>,
+    file_exists: fn(&PathBuf) -> bool,
 ) -> Result<GitRevSpecResolved, anyhow::Error> {
-    return Ok(GitRevSpecResolved {
-        value: "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
-    });
+    return Ok(GitRevSpecResolved::Match(
+        ("af648df27488d558e794eb1e25304a90930d9d38".to_string()),
+    ));
 }
 
 #[cfg(all(test, not(feature = "ignore_tests")))]
@@ -240,6 +242,8 @@ mod tests_resolve_git_rev_spec_parsed {
     const GIT_REFS_HEADS_MASTER: &str = "af648df27488d558e794eb1e25304a90930d9d38";
     const GIT_REFS_HEADS_FEAT_FOO: &str = "eea961ba163d275c90fd6ba57d70754809b428a1";
     const GIT_REFS_TAGS_V0_1_0: &str = "b82608c0bb54a84ae7b3d38112ccf1cb50aebe8d";
+    const GIT_REFS_HEADS_AMBIGUOUS: &str = "4269cb47c9e9afc08092a4344c7ec7c9545c51ee";
+    const GIT_REFS_TAGS_AMBIGUOUS: &str = "ef916326703d7dcd9cab6b9ba6bb4793912508af";
     const MOCK_COMMIT_CONTENT: &str = "mock commit content"; // todo should be formatted+compressed but not necessary for the test
 
     fn mock_read(path: &std::path::PathBuf) -> std::io::Result<Vec<u8>> {
@@ -247,7 +251,9 @@ mod tests_resolve_git_rev_spec_parsed {
             Some(".git/HEAD") => Ok(GIT_HEAD.as_bytes().to_owned()),
             Some(".git/refs/heads/master") => Ok(GIT_REFS_HEADS_MASTER.as_bytes().to_owned()),
             Some(".git/refs/heads/feat/foo") => Ok(GIT_REFS_HEADS_FEAT_FOO.as_bytes().to_owned()),
-            Some(".git/refs/heads/tags/v0.1.0") => Ok(GIT_REFS_TAGS_V0_1_0.as_bytes().to_owned()),
+            Some(".git/refs/tags/v0.1.0") => Ok(GIT_REFS_TAGS_V0_1_0.as_bytes().to_owned()),
+            Some(".git/refs/heads/ambiguous") => Ok(GIT_REFS_HEADS_AMBIGUOUS.as_bytes().to_owned()),
+            Some(".git/refs/tags/ambiguous") => Ok(GIT_REFS_TAGS_AMBIGUOUS.as_bytes().to_owned()),
             Some(".git/objects/af/648df27488d558e794eb1e25304a90930d9d38") => {
                 Ok(MOCK_COMMIT_CONTENT.as_bytes().to_owned())
             }
@@ -263,6 +269,12 @@ mod tests_resolve_git_rev_spec_parsed {
             )),
         }
     }
+    fn mock_file_exits(path: &std::path::PathBuf) -> bool {
+        match mock_read(path) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
 
     #[test]
     fn test_resolve_git_rev_spec_parsed_commit_sha() {
@@ -272,12 +284,11 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: GIT_REFS_HEADS_MASTER.to_string(),
                     modifier: None,
                 },
-                mock_read
+                mock_read,
+                mock_file_exits
             )
             .unwrap(),
-            GitRevSpecResolved {
-                value: GIT_REFS_HEADS_MASTER.to_string()
-            }
+            GitRevSpecResolved::Match(GIT_REFS_HEADS_MASTER.to_string())
         )
     }
 
@@ -289,12 +300,11 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "HEAD".to_string(),
                     modifier: None,
                 },
-                mock_read
+                mock_read,
+                mock_file_exits
             )
             .unwrap(),
-            GitRevSpecResolved {
-                value: GIT_REFS_HEADS_MASTER.to_string()
-            }
+            GitRevSpecResolved::Match(GIT_REFS_HEADS_MASTER.to_string())
         )
     }
 
@@ -306,12 +316,11 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "feat/foo".to_string(),
                     modifier: None,
                 },
-                mock_read
+                mock_read,
+                mock_file_exits
             )
             .unwrap(),
-            GitRevSpecResolved {
-                value: GIT_REFS_HEADS_FEAT_FOO.to_string()
-            }
+            GitRevSpecResolved::Match(GIT_REFS_HEADS_FEAT_FOO.to_string())
         )
     }
 
@@ -323,12 +332,11 @@ mod tests_resolve_git_rev_spec_parsed {
                     value: "v0.1.0".to_string(),
                     modifier: None,
                 },
-                mock_read
+                mock_read,
+                mock_file_exits
             )
             .unwrap(),
-            GitRevSpecResolved {
-                value: GIT_REFS_TAGS_V0_1_0.to_string()
-            }
+            GitRevSpecResolved::Match(GIT_REFS_TAGS_V0_1_0.to_string())
         )
     }
 }

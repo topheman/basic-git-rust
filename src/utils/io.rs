@@ -27,3 +27,14 @@ pub fn find_git_root_from_cwd() -> anyhow::Result<PathBuf> {
 pub fn read<P: std::convert::AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     std::fs::read(path)
 }
+
+pub fn file_exists<P: std::convert::AsRef<std::path::Path>>(path: P) -> bool {
+    match std::fs::metadata(path) {
+        Ok(metadata) => {
+            return metadata.is_file();
+        }
+        Err(_) => {
+            return false;
+        }
+    }
+}
