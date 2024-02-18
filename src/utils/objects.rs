@@ -19,6 +19,7 @@ fn resolve_head(
     }
 }
 
+#[derive(PartialEq)]
 enum GitRevSpecType {
     CommitSha,
     BranchName,
@@ -67,8 +68,19 @@ impl GitRevSpecParsed {
                 }
                 return Err(anyhow!("Not a commitsha"));
             }
-            GitRevSpecType::BranchName => todo!(),
-            GitRevSpecType::TagName => todo!(),
+            GitRevSpecType::BranchName | GitRevSpecType::TagName => {
+                let mut target_path = PathBuf::new();
+                target_path.push("refs");
+                if git_rev_spec_type == GitRevSpecType::BranchName {
+                    target_path.push("heads");
+                }
+                if git_rev_spec_type == GitRevSpecType::TagName {
+                    target_path.push("tags");
+                }
+                let target_path =
+                    parser_helpers::git_rev_spec_value_into_path_buf(&self.value, target_path);
+                return Ok(target_path);
+            }
         }
     }
 }
@@ -111,17 +123,77 @@ mod test_git_rev_spec_parsed_impl {
     }
 
     #[test]
-    fn test_to_path_buffer_commit_ko_not_correct_length() {
+    fn test_to_path_buffer_branch_no_slash() {
         let git_rev_spec_parsed = GitRevSpecParsed {
-            value: "af648df27488d558e794eb".to_string(),
+            value: "master".to_string(),
             modifier: None,
         };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path.join("refs").join("heads").join("master");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::BranchName)
+                .unwrap(),
+            resolved_path
+        )
+    }
 
-        let error = git_rev_spec_parsed
-            .to_path_buf(GitRevSpecType::CommitSha)
-            .unwrap_err();
+    #[test]
+    fn test_to_path_buffer_branch_multiple_slashes() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "feat/foo/bar".to_string(),
+            modifier: None,
+        };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path
+            .join("refs")
+            .join("heads")
+            .join("feat")
+            .join("foo")
+            .join("bar");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::BranchName)
+                .unwrap(),
+            resolved_path
+        )
+    }
 
-        assert_eq!(format!("{}", error.root_cause()), "Not a commitsha");
+    #[test]
+    fn test_to_path_buffer_tag_no_slash() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "v1".to_string(),
+            modifier: None,
+        };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path.join("refs").join("tags").join("v1");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::TagName)
+                .unwrap(),
+            resolved_path
+        )
+    }
+
+    #[test]
+    fn test_to_path_buffer_tag_multiple_slashes() {
+        let git_rev_spec_parsed = GitRevSpecParsed {
+            value: "v1/foo/bar".to_string(),
+            modifier: None,
+        };
+        let resolved_path = PathBuf::new();
+        let resolved_path = resolved_path
+            .join("refs")
+            .join("tags")
+            .join("v1")
+            .join("foo")
+            .join("bar");
+        assert_eq!(
+            git_rev_spec_parsed
+                .to_path_buf(GitRevSpecType::TagName)
+                .unwrap(),
+            resolved_path
+        )
     }
 }
 
@@ -144,6 +216,8 @@ fn parse_git_rev_spec(
 }
 
 mod parser_helpers {
+    use std::path::PathBuf;
+
     use nom::{bytes::complete::*, combinator::*, IResult};
 
     fn is_caret(c: char) -> bool {
@@ -157,6 +231,13 @@ mod parser_helpers {
     }
     pub fn take_rev_spec(input: &str) -> IResult<&str, &str> {
         take_while(|c| !is_caret(c) && !is_tilde(c) && !is_at(c))(input)
+    }
+    pub fn git_rev_spec_value_into_path_buf(input: &str, mut root_path_buf: PathBuf) -> PathBuf {
+        let fragments: Vec<&str> = input.split("/").collect();
+        for fragment in fragments.iter() {
+            root_path_buf.push(fragment);
+        }
+        return root_path_buf;
     }
 
     #[cfg(test)]
