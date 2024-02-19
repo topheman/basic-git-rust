@@ -2,6 +2,8 @@ use anyhow::anyhow;
 use bstr::ByteSlice;
 use std::path::PathBuf;
 
+use super::io::file_exists;
+
 pub fn resolve_git_rev_spec(git_rev_spec: String) -> Result<String, anyhow::Error> {
     return Ok("".to_string());
 }
@@ -43,11 +45,14 @@ struct GitRevSpecParsed {
 }
 
 impl GitRevSpecParsed {
-    fn to_path_buf(&self, git_rev_spec_type: GitRevSpecType) -> Result<PathBuf, anyhow::Error> {
+    fn to_path_buf(
+        &self,
+        git_rev_spec_type: GitRevSpecType,
+        git_root: &PathBuf,
+    ) -> Result<PathBuf, anyhow::Error> {
         match git_rev_spec_type {
             GitRevSpecType::Head => {
-                let mut target_path = PathBuf::new();
-                target_path.push("HEAD");
+                let target_path = git_root.join("HEAD");
                 return Ok(target_path);
             }
             GitRevSpecType::CommitSha => {
@@ -71,13 +76,12 @@ impl GitRevSpecParsed {
                         return Some(target_path);
                     });
                 if target_path.is_some() {
-                    return Ok(target_path.unwrap());
+                    return Ok(git_root.join(target_path.unwrap()));
                 }
                 return Err(anyhow!("Not a commitsha"));
             }
             GitRevSpecType::BranchName | GitRevSpecType::TagName => {
-                let mut target_path = PathBuf::new();
-                target_path.push("refs");
+                let mut target_path = git_root.join("refs");
                 if git_rev_spec_type == GitRevSpecType::BranchName {
                     target_path.push("heads");
                 }
@@ -102,11 +106,11 @@ mod test_git_rev_spec_parsed_impl {
             value: "HEAD".to_string(),
             modifier: None,
         };
-        let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path.join("HEAD");
+        let git_root = PathBuf::new().join(".git");
+        let resolved_path = PathBuf::new().join(".git").join("HEAD");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::Head)
+                .to_path_buf(GitRevSpecType::Head, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -118,14 +122,16 @@ mod test_git_rev_spec_parsed_impl {
             value: "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
             modifier: None,
         };
+        let git_root = PathBuf::new().join(".git");
         let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path
+        let resolved_path = PathBuf::new()
+            .join(".git")
             .join("objects")
             .join("af")
             .join("648df27488d558e794eb1e25304a90930d9d38");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::CommitSha)
+                .to_path_buf(GitRevSpecType::CommitSha, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -137,9 +143,10 @@ mod test_git_rev_spec_parsed_impl {
             value: "af648df27488d558e794eb".to_string(),
             modifier: None,
         };
+        let git_root = PathBuf::new().join(".git");
 
         let error = git_rev_spec_parsed
-            .to_path_buf(GitRevSpecType::CommitSha)
+            .to_path_buf(GitRevSpecType::CommitSha, &git_root)
             .unwrap_err();
 
         assert_eq!(format!("{}", error.root_cause()), "Not a commitsha");
@@ -151,11 +158,15 @@ mod test_git_rev_spec_parsed_impl {
             value: "master".to_string(),
             modifier: None,
         };
-        let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path.join("refs").join("heads").join("master");
+        let git_root = PathBuf::new().join(".git");
+        let resolved_path = PathBuf::new()
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("master");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::BranchName)
+                .to_path_buf(GitRevSpecType::BranchName, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -167,8 +178,10 @@ mod test_git_rev_spec_parsed_impl {
             value: "feat/foo/bar".to_string(),
             modifier: None,
         };
+        let git_root = PathBuf::new().join(".git");
         let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path
+        let resolved_path = PathBuf::new()
+            .join(".git")
             .join("refs")
             .join("heads")
             .join("feat")
@@ -176,7 +189,7 @@ mod test_git_rev_spec_parsed_impl {
             .join("bar");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::BranchName)
+                .to_path_buf(GitRevSpecType::BranchName, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -188,11 +201,15 @@ mod test_git_rev_spec_parsed_impl {
             value: "v1".to_string(),
             modifier: None,
         };
-        let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path.join("refs").join("tags").join("v1");
+        let git_root = PathBuf::new().join(".git");
+        let resolved_path = PathBuf::new()
+            .join(".git")
+            .join("refs")
+            .join("tags")
+            .join("v1");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::TagName)
+                .to_path_buf(GitRevSpecType::TagName, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -204,8 +221,9 @@ mod test_git_rev_spec_parsed_impl {
             value: "v1/foo/bar".to_string(),
             modifier: None,
         };
-        let resolved_path = PathBuf::new();
-        let resolved_path = resolved_path
+        let git_root = PathBuf::new().join(".git");
+        let resolved_path = PathBuf::new()
+            .join(".git")
             .join("refs")
             .join("tags")
             .join("v1")
@@ -213,7 +231,7 @@ mod test_git_rev_spec_parsed_impl {
             .join("bar");
         assert_eq!(
             git_rev_spec_parsed
-                .to_path_buf(GitRevSpecType::TagName)
+                .to_path_buf(GitRevSpecType::TagName, &git_root)
                 .unwrap(),
             resolved_path
         )
@@ -419,25 +437,51 @@ mod tests_git_rev_spec_parsed {
 enum GitRevSpecResolved {
     Match(String),
     Ambiguous(String),
+    NotFound,
 }
 
 fn resolve_git_rev_spec_parsed(
     git_rev_spec_parsed: GitRevSpecParsed,
+    git_root: &PathBuf,
     read_as_string: fn(&PathBuf) -> Result<String, anyhow::Error>,
     file_exists: fn(&PathBuf) -> bool,
-) -> Result<GitRevSpecResolved, anyhow::Error> {
-    if let Ok(path_buf_head) = git_rev_spec_parsed.to_path_buf(GitRevSpecType::Head) {
-        match read_as_string(&path_buf_head) {
-            Ok(head_content) => {
-                // todo later - parse it and resolve it
-                return Ok(GitRevSpecResolved::Match(head_content));
-            }
-            _ => {}
+) -> GitRevSpecResolved {
+    let mut matches: Vec<String> = Vec::new();
+    // todo missing `.git` (git_root)
+    if let Ok(path_buf_head) = git_rev_spec_parsed.to_path_buf(GitRevSpecType::Head, git_root) {
+        if let Ok(head_content) = read_as_string(&path_buf_head) {
+            return GitRevSpecResolved::Match(head_content);
         }
     }
-    return Ok(GitRevSpecResolved::Match(
-        "af648df27488d558e794eb1e25304a90930d9d38".to_string(),
-    ));
+    if let Ok(path_buf_commit) =
+        git_rev_spec_parsed.to_path_buf(GitRevSpecType::CommitSha, git_root)
+    {
+        if file_exists(&path_buf_commit) {
+            return GitRevSpecResolved::Match(git_rev_spec_parsed.value);
+        }
+    }
+    if let Ok(path_buf_branch) =
+        git_rev_spec_parsed.to_path_buf(GitRevSpecType::BranchName, git_root)
+    {
+        println!("branch {:?}", path_buf_branch);
+        if let Ok(branch_content) = read_as_string(&path_buf_branch) {
+            matches.push(branch_content);
+        }
+    }
+    if let Ok(path_buf_tag) = git_rev_spec_parsed.to_path_buf(GitRevSpecType::TagName, git_root) {
+        println!("tag {:?}", path_buf_tag);
+        if let Ok(tag_content) = read_as_string(&path_buf_tag) {
+            matches.push(tag_content);
+        }
+    }
+    match matches.len() {
+        2 => GitRevSpecResolved::Ambiguous(matches.get(1).unwrap().to_owned()),
+        1 => GitRevSpecResolved::Match(matches.get(0).unwrap().to_owned()),
+        0 => GitRevSpecResolved::NotFound,
+        _ => {
+            unreachable!()
+        }
+    }
 }
 
 fn try_resolve_git_rev_spec_parsed_commit(
@@ -448,6 +492,8 @@ fn try_resolve_git_rev_spec_parsed_commit(
 
 #[cfg(all(test, not(feature = "ignore_tests")))]
 mod tests_resolve_git_rev_spec_parsed {
+    use std::path::PathBuf;
+
     use super::{resolve_git_rev_spec_parsed, GitRevSpecParsed, GitRevSpecResolved};
 
     const GIT_HEAD: &str = "ref: refs/heads/master";
@@ -487,64 +533,68 @@ mod tests_resolve_git_rev_spec_parsed {
 
     #[test]
     fn test_resolve_git_rev_spec_parsed_commit_sha() {
+        let git_root = PathBuf::new().join(".git");
         assert_eq!(
             resolve_git_rev_spec_parsed(
                 GitRevSpecParsed {
                     value: GIT_REFS_HEADS_MASTER.to_string(),
                     modifier: None,
                 },
+                &git_root,
                 mock_read_as_string,
                 mock_file_exits
-            )
-            .unwrap(),
+            ),
             GitRevSpecResolved::Match(GIT_REFS_HEADS_MASTER.to_string())
         )
     }
 
     #[test]
     fn test_resolve_git_rev_spec_parsed_head() {
+        let git_root = PathBuf::new().join(".git");
         assert_eq!(
             resolve_git_rev_spec_parsed(
                 GitRevSpecParsed {
                     value: "HEAD".to_string(),
                     modifier: None,
                 },
+                &git_root,
                 mock_read_as_string,
                 mock_file_exits
-            )
-            .unwrap(),
+            ),
             GitRevSpecResolved::Match(GIT_REFS_HEADS_MASTER.to_string())
         )
     }
 
     #[test]
     fn test_resolve_git_rev_spec_parsed_feat_foo() {
+        let git_root = PathBuf::new().join(".git");
         assert_eq!(
             resolve_git_rev_spec_parsed(
                 GitRevSpecParsed {
                     value: "feat/foo".to_string(),
                     modifier: None,
                 },
+                &git_root,
                 mock_read_as_string,
                 mock_file_exits
-            )
-            .unwrap(),
+            ),
             GitRevSpecResolved::Match(GIT_REFS_HEADS_FEAT_FOO.to_string())
         )
     }
 
     #[test]
     fn test_resolve_git_rev_spec_parsed_tag_v_010() {
+        let git_root = PathBuf::new().join(".git");
         assert_eq!(
             resolve_git_rev_spec_parsed(
                 GitRevSpecParsed {
                     value: "v0.1.0".to_string(),
                     modifier: None,
                 },
+                &git_root,
                 mock_read_as_string,
                 mock_file_exits
-            )
-            .unwrap(),
+            ),
             GitRevSpecResolved::Match(GIT_REFS_TAGS_V0_1_0.to_string())
         )
     }
