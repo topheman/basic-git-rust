@@ -52,8 +52,12 @@ impl GitRevSpecParsed {
     ) -> Result<PathBuf, anyhow::Error> {
         match git_rev_spec_type {
             GitRevSpecType::Head => {
-                let target_path = git_root.join("HEAD");
-                return Ok(target_path);
+                if self.value == "HEAD" {
+                    let target_path = git_root.join("HEAD");
+                    return Ok(target_path);
+                } else {
+                    return Err(anyhow!("Not a HEAD"));
+                }
             }
             GitRevSpecType::CommitSha => {
                 if self.value.len() != 40 {
